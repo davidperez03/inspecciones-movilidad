@@ -8,14 +8,18 @@ import { useRouter, usePathname } from "next/navigation"
 
 type AuthContextType = {
   user: any
+  perfil: any
   loading: boolean
   signOut: () => Promise<void>
+  esAdministrador: () => boolean
+  esInspector: () => boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<any>(null)
+  const [perfil, setPerfil] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const router = useRouter()
   const pathname = usePathname()
@@ -26,6 +30,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         data: { user },
       } = await supabase.auth.getUser()
       setUser(user || null)
+
+      // Cargar perfil del usuario
+      if (user) {
+        const { data: perfilData } = await supabase
+          .from("perfiles")
+          .select("*")
+          .eq("id", user.id)
+          .single()
+        setPerfil(perfilData)
+      } else {
+        setPerfil(null)
+      }
+
       setLoading(false)
 
       // Redirigir según la autenticación
@@ -60,7 +77,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push("/auth")
   }
 
-  return <AuthContext.Provider value={{ user, loading, signOut }}>{children}</AuthContext.Provider>
+  const esAdministrador = () => {
+    return perfil?.rol === 'administrador' && perfil?.activo === true
+  }
+
+  const esInspector = () => {
+    return (perfil?.rol === 'inspector' || perfil?.rol === 'administrador') && perfil?.activo === true
+  }
+
+  return (
+    <AuthContext.Provider value={{ user, perfil, loading, signOut, esAdministrador, esInspector }}>
+      {children}
+    </AuthContext.Provider>
+  )
 }
 
 export function useAuth() {

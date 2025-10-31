@@ -40,6 +40,7 @@ import {
 import { parseFechaLocal } from "@/lib/bitacora-config"
 import { ExportReportButton } from "@/components/export-report-button"
 import { generarReporteFlotaVehiculos, generarReporteVencimientos } from "@/lib/reportes/vehiculos-reports"
+import { useAuth } from "@/components/auth-provider"
 
 export default function VehiculosPage() {
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([])
@@ -48,15 +49,18 @@ export default function VehiculosPage() {
   const [editingVehiculo, setEditingVehiculo] = useState<Vehiculo | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const { toast } = useToast()
+  const { esAdministrador } = useAuth()
 
   const [formData, setFormData] = useState({
     placa: "",
     marca: "",
     modelo: "",
-    tipo: "GRÚA PLATAFORMA",
+    tipo: "GRÚA DE PLATAFORMA",
     soat_vencimiento: "",
     tecnomecanica_vencimiento: "",
     soat_aseguradora: "",
+    numero_poliza_soat: "",
+    observaciones: "",
   })
 
   useEffect(() => {
@@ -86,10 +90,12 @@ export default function VehiculosPage() {
       placa: "",
       marca: "",
       modelo: "",
-      tipo: "GRÚA PLATAFORMA",
+      tipo: "GRÚA DE PLATAFORMA",
       soat_vencimiento: "",
       tecnomecanica_vencimiento: "",
       soat_aseguradora: "",
+      numero_poliza_soat: "",
+      observaciones: "",
     })
     setDialogOpen(true)
   }
@@ -100,16 +106,28 @@ export default function VehiculosPage() {
       placa: vehiculo.placa,
       marca: vehiculo.marca || "",
       modelo: vehiculo.modelo || "",
-      tipo: vehiculo.tipo || "GRÚA PLATAFORMA",
+      tipo: vehiculo.tipo || "GRÚA DE PLATAFORMA",
       soat_vencimiento: vehiculo.soat_vencimiento || "",
       tecnomecanica_vencimiento: vehiculo.tecnomecanica_vencimiento || "",
       soat_aseguradora: vehiculo.soat_aseguradora || "",
+      numero_poliza_soat: vehiculo.numero_poliza_soat || "",
+      observaciones: vehiculo.observaciones || "",
     })
     setDialogOpen(true)
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+
+    // Verificar permisos
+    if (!esAdministrador()) {
+      toast({
+        title: "Permisos insuficientes",
+        description: "Solo los administradores pueden crear o modificar vehículos. Contacta a tu administrador para que te asigne el rol adecuado.",
+        variant: "destructive",
+      })
+      return
+    }
 
     try {
       if (editingVehiculo) {
@@ -118,6 +136,8 @@ export default function VehiculosPage() {
           soat_vencimiento: formData.soat_vencimiento || null,
           tecnomecanica_vencimiento: formData.tecnomecanica_vencimiento || null,
           soat_aseguradora: formData.soat_aseguradora || null,
+          numero_poliza_soat: formData.numero_poliza_soat || null,
+          observaciones: formData.observaciones || null,
         })
         toast({
           title: "Vehículo actualizado",
@@ -125,11 +145,16 @@ export default function VehiculosPage() {
         })
       } else {
         await createVehiculo({
-          ...formData,
+          placa: formData.placa,
+          marca: formData.marca || null,
+          modelo: formData.modelo || null,
+          tipo: formData.tipo,
           activo: true,
           soat_vencimiento: formData.soat_vencimiento || null,
           tecnomecanica_vencimiento: formData.tecnomecanica_vencimiento || null,
           soat_aseguradora: formData.soat_aseguradora || null,
+          numero_poliza_soat: formData.numero_poliza_soat || null,
+          observaciones: formData.observaciones || null,
         })
         toast({
           title: "Vehículo creado",
@@ -139,11 +164,20 @@ export default function VehiculosPage() {
 
       setDialogOpen(false)
       cargarVehiculos()
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error al guardar vehículo:", error)
+
+      let descripcionError = "No se pudo guardar el vehículo"
+
+      if (error?.message?.includes("row-level security")) {
+        descripcionError = "No tienes permisos para realizar esta acción. Solo los administradores pueden gestionar vehículos."
+      } else if (error?.message) {
+        descripcionError = error.message
+      }
+
       toast({
         title: "Error",
-        description: "No se pudo guardar el vehículo",
+        description: descripcionError,
         variant: "destructive",
       })
     }
@@ -230,10 +264,12 @@ export default function VehiculosPage() {
             variant="secondary"
             disabled={vehiculosActivos.length === 0}
           />
-          <Button onClick={abrirDialogNuevo}>
-            <Plus className="h-4 w-4 mr-2" />
-            Nuevo Vehículo
-          </Button>
+          {esAdministrador() && (
+            <Button onClick={abrirDialogNuevo}>
+              <Plus className="h-4 w-4 mr-2" />
+              Nuevo Vehículo
+            </Button>
+          )}
         </div>
       </div>
 
@@ -325,22 +361,26 @@ export default function VehiculosPage() {
                           </TableCell>
                           <TableCell>{vehiculo.soat_aseguradora || "-"}</TableCell>
                           <TableCell>
-                            <div className="flex gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => abrirDialogEditar(vehiculo)}
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => handleDesactivar(vehiculo.id)}
-                              >
-                                <XCircle className="h-4 w-4" />
-                              </Button>
-                            </div>
+                            {esAdministrador() ? (
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => abrirDialogEditar(vehiculo)}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => handleDesactivar(vehiculo.id)}
+                                >
+                                  <XCircle className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">Solo lectura</span>
+                            )}
                           </TableCell>
                         </TableRow>
                       )
@@ -380,14 +420,18 @@ export default function VehiculosPage() {
                         </TableCell>
                         <TableCell>{vehiculo.tipo}</TableCell>
                         <TableCell>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleReactivar(vehiculo.id)}
-                          >
-                            <RotateCcw className="h-4 w-4 mr-2" />
-                            Reactivar
-                          </Button>
+                          {esAdministrador() ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleReactivar(vehiculo.id)}
+                            >
+                              <RotateCcw className="h-4 w-4 mr-2" />
+                              Reactivar
+                            </Button>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">Solo lectura</span>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))
@@ -430,7 +474,8 @@ export default function VehiculosPage() {
                   id="tipo"
                   value={formData.tipo}
                   onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
-                  placeholder="GRÚA PLATAFORMA"
+                  placeholder="GRÚA DE PLATAFORMA"
+                  disabled
                 />
               </div>
 
@@ -479,13 +524,33 @@ export default function VehiculosPage() {
                   />
                 </div>
 
-                <div className="space-y-2 col-span-2">
+                <div className="space-y-2">
+                  <Label htmlFor="numero_poliza_soat">Número de Póliza SOAT</Label>
+                  <Input
+                    id="numero_poliza_soat"
+                    value={formData.numero_poliza_soat}
+                    onChange={(e) => setFormData({ ...formData, numero_poliza_soat: e.target.value })}
+                    placeholder="123456789"
+                  />
+                </div>
+
+                <div className="space-y-2">
                   <Label htmlFor="tecnomecanica_vencimiento">Vencimiento Tecnomecánica</Label>
                   <Input
                     id="tecnomecanica_vencimiento"
                     type="date"
                     value={formData.tecnomecanica_vencimiento}
                     onChange={(e) => setFormData({ ...formData, tecnomecanica_vencimiento: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-2 col-span-2">
+                  <Label htmlFor="observaciones">Observaciones</Label>
+                  <Input
+                    id="observaciones"
+                    value={formData.observaciones}
+                    onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
+                    placeholder="Notas adicionales sobre el vehículo"
                   />
                 </div>
               </div>
