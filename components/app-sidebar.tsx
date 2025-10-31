@@ -13,7 +13,8 @@ import {
   User,
   Truck,
   Users,
-  BarChart3
+  BarChart3,
+  UserCog
 } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
 import {
@@ -87,6 +88,12 @@ const navigationGroups = [
   {
     title: "Gestión",
     items: [
+      {
+        name: "Personal",
+        href: "/gestion-personal",
+        icon: UserCog,
+        description: "Crear y gestionar operarios, auxiliares e inspectores"
+      },
       {
         name: "Vehículos",
         href: "/vehiculos",
