@@ -11,13 +11,15 @@
 
 ALTER TABLE public.perfiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.vehiculos ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.roles_operativos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.personal ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.turnos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.asignaciones_turno ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.movimientos_personal ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bitacora_eventos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bitacora_cierres ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.inspecciones ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.items_inspeccion ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.fotos_inspeccion ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.historial_personal ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.historial_acciones ENABLE ROW LEVEL SECURITY;
 
 -- ============================================
@@ -93,32 +95,90 @@ CREATE POLICY "Solo administradores pueden gestionar vehículos"
   USING (public.es_administrador());
 
 -- ============================================
--- POLÍTICAS: roles_operativos
+-- POLÍTICAS: personal
 -- ============================================
 
--- Todos pueden ver roles operativos activos
-CREATE POLICY "Todos pueden ver roles operativos activos"
-  ON public.roles_operativos FOR SELECT
-  USING (activo = true OR public.es_administrador());
+-- Todos pueden ver personal activo
+CREATE POLICY "Todos pueden ver personal activo"
+  ON public.personal FOR SELECT
+  USING (estado = 'activo' OR public.es_administrador());
 
--- Los usuarios pueden ver sus propios roles (incluso inactivos)
-CREATE POLICY "Usuarios pueden ver sus propios roles"
-  ON public.roles_operativos FOR SELECT
+-- Los usuarios pueden ver su propio registro de personal (si tienen perfil_id vinculado)
+CREATE POLICY "Usuarios pueden ver su propio registro de personal"
+  ON public.personal FOR SELECT
   USING (perfil_id = auth.uid());
 
--- Solo administradores pueden crear roles operativos
-CREATE POLICY "Solo administradores pueden crear roles operativos"
-  ON public.roles_operativos FOR INSERT
+-- Solo administradores pueden crear personal
+CREATE POLICY "Solo administradores pueden crear personal"
+  ON public.personal FOR INSERT
   WITH CHECK (public.es_administrador());
 
--- Solo administradores pueden actualizar roles operativos
-CREATE POLICY "Solo administradores pueden actualizar roles operativos"
-  ON public.roles_operativos FOR UPDATE
+-- Solo administradores pueden actualizar personal
+CREATE POLICY "Solo administradores pueden actualizar personal"
+  ON public.personal FOR UPDATE
   USING (public.es_administrador());
 
--- Solo administradores pueden eliminar roles operativos
-CREATE POLICY "Solo administradores pueden eliminar roles operativos"
-  ON public.roles_operativos FOR DELETE
+-- Solo administradores pueden eliminar personal
+CREATE POLICY "Solo administradores pueden eliminar personal"
+  ON public.personal FOR DELETE
+  USING (public.es_administrador());
+
+-- ============================================
+-- POLÍTICAS: turnos
+-- ============================================
+
+-- Todos pueden ver turnos activos
+CREATE POLICY "Todos pueden ver turnos activos"
+  ON public.turnos FOR SELECT
+  USING (activo = true OR public.es_administrador());
+
+-- Solo administradores pueden crear turnos
+CREATE POLICY "Solo administradores pueden crear turnos"
+  ON public.turnos FOR INSERT
+  WITH CHECK (public.es_administrador());
+
+-- Solo administradores pueden actualizar turnos
+CREATE POLICY "Solo administradores pueden actualizar turnos"
+  ON public.turnos FOR UPDATE
+  USING (public.es_administrador());
+
+-- Solo administradores pueden eliminar turnos
+CREATE POLICY "Solo administradores pueden eliminar turnos"
+  ON public.turnos FOR DELETE
+  USING (public.es_administrador());
+
+-- ============================================
+-- POLÍTICAS: asignaciones_turno
+-- ============================================
+
+-- Todos pueden ver asignaciones activas
+CREATE POLICY "Todos pueden ver asignaciones de turno activas"
+  ON public.asignaciones_turno FOR SELECT
+  USING (activo = true OR public.es_administrador());
+
+-- Los usuarios pueden ver sus propias asignaciones (si tienen personal vinculado)
+CREATE POLICY "Usuarios pueden ver sus asignaciones de turno"
+  ON public.asignaciones_turno FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.personal
+      WHERE id = personal_id AND perfil_id = auth.uid()
+    )
+  );
+
+-- Solo administradores pueden crear asignaciones
+CREATE POLICY "Solo administradores pueden crear asignaciones de turno"
+  ON public.asignaciones_turno FOR INSERT
+  WITH CHECK (public.es_administrador());
+
+-- Solo administradores pueden actualizar asignaciones
+CREATE POLICY "Solo administradores pueden actualizar asignaciones de turno"
+  ON public.asignaciones_turno FOR UPDATE
+  USING (public.es_administrador());
+
+-- Solo administradores pueden eliminar asignaciones
+CREATE POLICY "Solo administradores pueden eliminar asignaciones de turno"
+  ON public.asignaciones_turno FOR DELETE
   USING (public.es_administrador());
 
 -- ============================================
@@ -291,31 +351,41 @@ CREATE POLICY "Solo administradores pueden eliminar fotos"
   USING (public.es_administrador());
 
 -- ============================================
--- POLÍTICAS: historial_personal
+-- POLÍTICAS: movimientos_personal
 -- ============================================
 
--- Solo administradores pueden ver el historial de personal
-CREATE POLICY "Solo administradores pueden ver historial de personal"
-  ON public.historial_personal FOR SELECT
+-- Solo administradores pueden ver el historial de movimientos de personal
+CREATE POLICY "Solo administradores pueden ver movimientos de personal"
+  ON public.movimientos_personal FOR SELECT
   TO authenticated
   USING (public.es_administrador());
 
--- Los triggers del sistema pueden insertar en historial
+-- Los usuarios pueden ver sus propios movimientos (si tienen personal vinculado)
+CREATE POLICY "Usuarios pueden ver sus propios movimientos"
+  ON public.movimientos_personal FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.personal
+      WHERE id = personal_id AND perfil_id = auth.uid()
+    )
+  );
+
+-- Los triggers del sistema pueden insertar movimientos
 -- Las funciones con SECURITY DEFINER bypasean RLS automáticamente
 -- Esta política previene inserciones manuales directas de usuarios
-CREATE POLICY "Prevenir inserciones manuales en historial"
-  ON public.historial_personal FOR INSERT
+CREATE POLICY "Prevenir inserciones manuales en movimientos"
+  ON public.movimientos_personal FOR INSERT
   TO authenticated
   WITH CHECK (public.es_administrador());
 
--- Solo administradores pueden actualizar historial (correcciones)
-CREATE POLICY "Solo administradores pueden actualizar historial"
-  ON public.historial_personal FOR UPDATE
+-- Solo administradores pueden actualizar movimientos (correcciones)
+CREATE POLICY "Solo administradores pueden actualizar movimientos"
+  ON public.movimientos_personal FOR UPDATE
   USING (public.es_administrador());
 
--- Solo administradores pueden eliminar historial
-CREATE POLICY "Solo administradores pueden eliminar historial"
-  ON public.historial_personal FOR DELETE
+-- Solo administradores pueden eliminar movimientos
+CREATE POLICY "Solo administradores pueden eliminar movimientos"
+  ON public.movimientos_personal FOR DELETE
   USING (public.es_administrador());
 
 -- ============================================

@@ -29,10 +29,65 @@ export type Perfil = {
   actualizado_por: string | null
 }
 
+// ============================================
+// TIPOS PARA PERSONAL OPERATIVO
+// ============================================
+// NUEVA ESTRUCTURA: Personal operativo (solo operarios y auxiliares)
+// Los inspectores están en la tabla perfiles con rol 'inspector'
+
+export type Personal = {
+  id: string
+  nombre_completo: string
+  numero_documento: string
+  tipo_documento: 'CC' | 'CE' | 'PA' | 'TI'
+  telefono: string | null
+  email: string | null
+  direccion: string | null
+  fecha_nacimiento: string | null
+  tipo_personal: 'operario' | 'auxiliar'
+  estado: 'activo' | 'inactivo' | 'suspendido' | 'vacaciones'
+  fecha_ingreso: string
+  fecha_salida: string | null
+  es_conductor: boolean
+  licencia_conduccion: string | null
+  categoria_licencia: 'A1' | 'A2' | 'B1' | 'B2' | 'B3' | 'C1' | 'C2' | 'C3' | null
+  licencia_vencimiento: string | null
+  perfil_id: string | null
+  observaciones: string | null
+  creado_en: string
+  actualizado_en: string
+  creado_por: string | null
+  actualizado_por: string | null
+  // Relación con perfil (opcional)
+  perfiles?: Perfil
+}
+
+// Tipo específico para operarios (con licencia obligatoria)
+export type Operario = Personal & {
+  tipo_personal: 'operario'
+  es_conductor: true
+  licencia_conduccion: string
+  categoria_licencia: 'A1' | 'A2' | 'B1' | 'B2' | 'B3' | 'C1' | 'C2' | 'C3'
+  licencia_vencimiento: string
+  // Compatibilidad
+  cedula: string // alias de numero_documento
+  nombre: string // alias de nombre_completo
+}
+
+// Tipo específico para auxiliares
+export type Auxiliar = Personal & {
+  tipo_personal: 'auxiliar'
+  // Compatibilidad
+  cedula: string // alias de numero_documento
+  nombre: string // alias de nombre_completo
+}
+
+// DEPRECATED: Mantener por compatibilidad con código existente
+// TODO: Migrar código que use RolOperativo a usar Personal
 export type RolOperativo = {
   id: string
   perfil_id: string
-  rol: 'operario' | 'auxiliar' | 'inspector'
+  rol: 'operario' | 'auxiliar'
   licencia_conduccion: string | null
   categoria_licencia: string | null
   licencia_vencimiento: string | null
@@ -44,44 +99,72 @@ export type RolOperativo = {
   actualizado_en: string
   creado_por: string | null
   actualizado_por: string | null
-  // Relación con perfil
   perfiles?: Perfil
 }
 
-// Tipo combinado para trabajar con operarios/auxiliares/inspectores
+// DEPRECATED: Usar Personal en su lugar
 export type PersonalOperativo = {
-  id: string // ID del perfil
-  nombre: string // nombre_completo del perfil
+  id: string
+  nombre: string
   numero_documento: string | null
   correo: string
   telefono: string | null
-  rol_operativo: 'operario' | 'auxiliar' | 'inspector'
-  rol_operativo_id: string // ID del rol operativo
+  rol_operativo: 'operario' | 'auxiliar'
+  rol_operativo_id: string
   activo: boolean
   fecha_inicio: string
   fecha_fin: string | null
-  // Campos específicos de operarios
   licencia_conduccion: string | null
   categoria_licencia: string | null
   licencia_vencimiento: string | null
   creado_en: string
 }
 
-// Compatibilidad con código existente
-export type Operario = PersonalOperativo & {
-  rol_operativo: 'operario'
-  cedula: string // numero_documento o correo como fallback
-  es_conductor: boolean
+// Los inspectores ahora son solo perfiles con rol 'inspector'
+export type Inspector = Perfil & {
+  rol: 'inspector'
+  // Compatibilidad
+  cedula: string // alias de numero_documento
+  nombre: string // alias de nombre_completo
 }
 
-export type Auxiliar = PersonalOperativo & {
-  rol_operativo: 'auxiliar'
-  cedula: string // numero_documento o correo como fallback
+// ============================================
+// TIPOS PARA TURNOS
+// ============================================
+
+export type Turno = {
+  id: string
+  nombre: string
+  descripcion: string | null
+  hora_inicio: string
+  hora_fin: string
+  duracion_horas: number | null
+  es_nocturno: boolean
+  activo: boolean
+  dias_semana: number[] // 0=domingo, 1=lunes, ..., 6=sábado
+  color: string | null
+  orden: number
+  creado_en: string
+  actualizado_en: string
+  creado_por: string | null
+  actualizado_por: string | null
 }
 
-export type Inspector = PersonalOperativo & {
-  rol_operativo: 'inspector'
-  cedula: string // numero_documento o correo como fallback
+export type AsignacionTurno = {
+  id: string
+  personal_id: string
+  turno_id: string
+  fecha_inicio: string
+  fecha_fin: string | null
+  activo: boolean
+  observaciones: string | null
+  creado_en: string
+  actualizado_en: string
+  creado_por: string | null
+  actualizado_por: string | null
+  // Relaciones
+  personal?: Personal
+  turnos?: Turno
 }
 
 // ============================================
@@ -292,42 +375,27 @@ export type BitacoraCierre = {
 }
 
 // ============================================
-// TIPOS PARA HISTORIAL
+// TIPOS PARA HISTORIAL Y MOVIMIENTOS
 // ============================================
-
-export type HistorialPersonal = {
-  id: string
-  personal_id: string
-  tipo_personal: 'operario' | 'auxiliar' | 'inspector'
-  nombre: string
-  cedula: string
-  tipo_movimiento: 'ingreso' | 'baja' | 'reingreso' | 'actualizacion' | 'cambio_estado'
-  fecha_movimiento: string
-  motivo: string | null
-  observaciones: string | null
-  estado_activo: boolean
-  es_conductor: boolean
-  licencia_conduccion: string | null
-  categoria_licencia: string | null
-  licencia_vencimiento: string | null
-  creado_en: string
-  creado_por: string | null
-}
 
 export type MovimientoPersonal = {
   id: string
-  nombre: string
-  cedula: string
-  tipo_personal: 'operario' | 'auxiliar' | 'inspector'
-  tipo_movimiento: 'ingreso' | 'baja' | 'reingreso' | 'actualizacion' | 'cambio_estado'
+  personal_id: string
+  tipo_movimiento: 'ingreso' | 'salida' | 'reingreso' | 'suspension' | 'reactivacion'
   fecha_movimiento: string
-  motivo: string | null
-  estado_activo: boolean
+  fecha_efectiva: string | null
+  motivo: string
+  observaciones: string | null
+  snapshot_data: Record<string, any> | null
+  creado_en: string
+  creado_por: string | null
+  // Relación con personal
+  personal?: Personal
 }
 
 export type PersonalActivoEnFecha = {
   personal_id: string
-  tipo_personal: 'operario' | 'auxiliar' | 'inspector'
+  tipo_personal: 'operario' | 'auxiliar'
   nombre: string
   cedula: string
   fecha_ingreso: string
@@ -340,11 +408,32 @@ export type PersonalActivoEnFecha = {
 export type EstadisticasMovimientos = {
   mes: string
   total_ingresos: number
-  total_bajas: number
+  total_salidas: number
   total_reingresos: number
+  total_suspensiones: number
+  total_reactivaciones: number
   movimientos_operarios: number
   movimientos_auxiliares: number
-  movimientos_inspectores: number
+}
+
+// DEPRECATED: Mantener por compatibilidad
+export type HistorialPersonal = {
+  id: string
+  personal_id: string
+  tipo_personal: 'operario' | 'auxiliar'
+  nombre: string
+  cedula: string
+  tipo_movimiento: 'ingreso' | 'salida' | 'reingreso' | 'suspension' | 'reactivacion'
+  fecha_movimiento: string
+  motivo: string | null
+  observaciones: string | null
+  estado_activo: boolean
+  es_conductor: boolean
+  licencia_conduccion: string | null
+  categoria_licencia: string | null
+  licencia_vencimiento: string | null
+  creado_en: string
+  creado_por: string | null
 }
 
 export type HistorialAccion = {

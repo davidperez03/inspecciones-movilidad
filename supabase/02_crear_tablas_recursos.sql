@@ -3,7 +3,10 @@
 -- ============================================
 -- Gestión de recursos de la empresa:
 -- - Vehículos de la flota
--- - Roles operativos (operario, auxiliar, inspector) vinculados a perfiles
+-- - Personal operativo (SOLO operarios y auxiliares)
+-- ============================================
+-- NOTA: Los inspectores NO están aquí, ya están en la tabla perfiles
+-- con rol 'inspector' del sistema
 -- ============================================
 
 -- ============================================
@@ -45,54 +48,90 @@ CREATE INDEX idx_vehiculos_soat_vencimiento ON public.vehiculos(soat_vencimiento
 CREATE INDEX idx_vehiculos_tecnomecanica_vencimiento ON public.vehiculos(tecnomecanica_vencimiento);
 
 -- ============================================
--- TABLA: roles_operativos
+-- TABLA: personal
 -- ============================================
--- Los usuarios del sistema (perfiles) pueden tener roles operativos
--- Un usuario puede ser operario, auxiliar, inspector o combinaciones
+-- SOLO para operarios y auxiliares (personal operativo de campo)
+-- Los inspectores están en la tabla perfiles con rol 'inspector'
 
-CREATE TABLE IF NOT EXISTS public.roles_operativos (
+CREATE TABLE IF NOT EXISTS public.personal (
   -- Identificación
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  perfil_id UUID NOT NULL REFERENCES public.perfiles(id) ON DELETE CASCADE,
 
-  -- Tipo de rol operativo
-  rol TEXT NOT NULL CHECK (rol IN ('operario', 'auxiliar', 'inspector')),
+  -- Datos personales
+  nombre_completo TEXT NOT NULL,
+  numero_documento TEXT NOT NULL UNIQUE,
+  tipo_documento TEXT NOT NULL DEFAULT 'CC'
+    CHECK (tipo_documento IN ('CC', 'CE', 'PA', 'TI')),
+  telefono TEXT,
+  email TEXT,
+  direccion TEXT,
+  fecha_nacimiento DATE,
 
-  -- Datos específicos para operarios (solo si rol = 'operario')
+  -- Tipo de personal (SOLO operarios y auxiliares)
+  tipo_personal TEXT NOT NULL
+    CHECK (tipo_personal IN ('operario', 'auxiliar')),
+
+  -- Estado laboral
+  estado TEXT NOT NULL DEFAULT 'activo'
+    CHECK (estado IN ('activo', 'inactivo', 'suspendido', 'vacaciones')),
+
+  -- Fechas de vinculación
+  fecha_ingreso DATE NOT NULL DEFAULT CURRENT_DATE,
+  fecha_salida DATE,
+
+  -- Datos de conductor (obligatorio para operarios, opcional para auxiliares)
+  es_conductor BOOLEAN DEFAULT false,
   licencia_conduccion TEXT,
-  categoria_licencia TEXT CHECK (categoria_licencia IN ('A1', 'A2', 'B1', 'B2', 'B3', 'C1', 'C2', 'C3')),
+  categoria_licencia TEXT
+    CHECK (categoria_licencia IN ('A1', 'A2', 'B1', 'B2', 'B3', 'C1', 'C2', 'C3')),
   licencia_vencimiento DATE,
 
-  -- Estado
-  activo BOOLEAN DEFAULT true,
-  fecha_inicio DATE DEFAULT CURRENT_DATE,
-  fecha_fin DATE,
-  motivo_inactivacion TEXT,
+  -- Vínculo con usuario del sistema (opcional)
+  -- Un operario/auxiliar puede tener acceso al sistema o no
+  perfil_id UUID REFERENCES public.perfiles(id) ON DELETE SET NULL,
 
   -- Metadata
+  observaciones TEXT,
   creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   actualizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   creado_por UUID REFERENCES public.perfiles(id),
   actualizado_por UUID REFERENCES public.perfiles(id),
 
-  -- Un usuario no puede tener el mismo rol duplicado
-  UNIQUE(perfil_id, rol)
+  -- Validación: si es operario, debe tener datos de conductor
+  CHECK (
+    (tipo_personal = 'auxiliar') OR
+    (tipo_personal = 'operario' AND es_conductor = true AND licencia_conduccion IS NOT NULL)
+  )
 );
 
-COMMENT ON TABLE public.roles_operativos IS
-  'Roles operativos asignados a usuarios. Un usuario puede ser operario (conductor), auxiliar (ayudante), inspector o combinaciones.';
+COMMENT ON TABLE public.personal IS
+  'Personal operativo: SOLO operarios (conductores) y auxiliares (ayudantes). Los inspectores están en la tabla perfiles.';
 
-COMMENT ON COLUMN public.roles_operativos.rol IS
-  'Tipo de rol: operario (conductor con licencia), auxiliar (ayudante sin licencia), inspector (realiza inspecciones)';
+COMMENT ON COLUMN public.personal.numero_documento IS
+  'Número de cédula o documento de identidad - ÚNICO';
 
-COMMENT ON COLUMN public.roles_operativos.licencia_conduccion IS
-  'Número de licencia de conducción (solo para operarios)';
+COMMENT ON COLUMN public.personal.tipo_personal IS
+  'Tipo: operario (conductor con licencia obligatoria) o auxiliar (ayudante, licencia opcional)';
+
+COMMENT ON COLUMN public.personal.estado IS
+  'Estado laboral actual: activo, inactivo, suspendido, vacaciones';
+
+COMMENT ON COLUMN public.personal.perfil_id IS
+  'Referencia opcional al perfil de usuario del sistema. No todo el personal operativo tiene acceso al sistema.';
+
+COMMENT ON COLUMN public.personal.es_conductor IS
+  'Indica si tiene licencia de conducción. Obligatorio TRUE para operarios, opcional para auxiliares.';
 
 -- Índices
-CREATE INDEX idx_roles_operativos_perfil ON public.roles_operativos(perfil_id);
-CREATE INDEX idx_roles_operativos_rol ON public.roles_operativos(rol);
-CREATE INDEX idx_roles_operativos_activo ON public.roles_operativos(activo) WHERE activo = true;
-CREATE INDEX idx_roles_operativos_licencia_vencimiento ON public.roles_operativos(licencia_vencimiento) WHERE rol = 'operario';
+CREATE UNIQUE INDEX idx_personal_numero_documento ON public.personal(numero_documento);
+CREATE INDEX idx_personal_tipo ON public.personal(tipo_personal);
+CREATE INDEX idx_personal_estado ON public.personal(estado);
+CREATE INDEX idx_personal_activo ON public.personal(estado) WHERE estado = 'activo';
+CREATE INDEX idx_personal_perfil ON public.personal(perfil_id) WHERE perfil_id IS NOT NULL;
+CREATE INDEX idx_personal_licencia_vencimiento ON public.personal(licencia_vencimiento)
+  WHERE es_conductor = true AND licencia_vencimiento IS NOT NULL;
+CREATE INDEX idx_personal_fecha_ingreso ON public.personal(fecha_ingreso DESC);
+CREATE INDEX idx_personal_nombre ON public.personal(nombre_completo);
 
 -- ============================================
 -- TRIGGERS: actualizar updated_at
@@ -103,7 +142,7 @@ CREATE TRIGGER trigger_vehiculos_actualizar_updated_at
   FOR EACH ROW
   EXECUTE FUNCTION public.actualizar_updated_at();
 
-CREATE TRIGGER trigger_roles_operativos_actualizar_updated_at
-  BEFORE UPDATE ON public.roles_operativos
+CREATE TRIGGER trigger_personal_actualizar_updated_at
+  BEFORE UPDATE ON public.personal
   FOR EACH ROW
   EXECUTE FUNCTION public.actualizar_updated_at();

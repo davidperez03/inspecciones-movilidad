@@ -5,57 +5,61 @@
 -- ============================================
 
 -- ============================================
--- TABLA: historial_personal
+-- TABLA: movimientos_personal
 -- ============================================
+-- Historial de movimientos IMPORTANTES de personal
+-- Solo registra: ingresos, salidas, reingresos, suspensiones, reactivaciones
 
-CREATE TABLE IF NOT EXISTS public.historial_personal (
+CREATE TABLE IF NOT EXISTS public.movimientos_personal (
   -- Identificación
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
-  -- Referencias
-  personal_id UUID NOT NULL,
-  tipo_personal TEXT NOT NULL
-    CHECK (tipo_personal IN ('operario', 'auxiliar', 'inspector')),
+  -- Referencia a personal
+  personal_id UUID NOT NULL REFERENCES public.personal(id) ON DELETE CASCADE,
 
-  -- Datos del personal (snapshot)
-  nombre TEXT NOT NULL,
-  cedula TEXT NOT NULL,
-
-  -- Movimiento
+  -- Tipo de movimiento (solo eventos importantes)
   tipo_movimiento TEXT NOT NULL
-    CHECK (tipo_movimiento IN ('ingreso', 'baja', 'reingreso', 'actualizacion', 'cambio_estado')),
-  fecha_movimiento DATE NOT NULL,
-  motivo TEXT,
+    CHECK (tipo_movimiento IN ('ingreso', 'salida', 'reingreso', 'suspension', 'reactivacion')),
+
+  -- Fechas
+  fecha_movimiento DATE NOT NULL DEFAULT CURRENT_DATE,
+  fecha_efectiva DATE, -- Fecha en que se hace efectivo el movimiento (puede ser diferente)
+
+  -- Detalles del movimiento
+  motivo TEXT NOT NULL,
   observaciones TEXT,
 
-  -- Estado en el momento
-  estado_activo BOOLEAN NOT NULL,
-
-  -- Datos de conductor (si aplica)
-  es_conductor BOOLEAN DEFAULT false,
-  licencia_conduccion TEXT,
-  categoria_licencia TEXT,
-  licencia_vencimiento DATE,
+  -- Datos snapshot del personal en ese momento
+  snapshot_data JSONB,
 
   -- Metadata
   creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   creado_por UUID REFERENCES public.perfiles(id)
 );
 
-COMMENT ON TABLE public.historial_personal IS
-  'Historial completo de movimientos de operarios, auxiliares e inspectores';
+COMMENT ON TABLE public.movimientos_personal IS
+  'Historial de movimientos importantes de personal: ingresos, salidas, reingresos, suspensiones y reactivaciones';
 
-COMMENT ON COLUMN public.historial_personal.tipo_movimiento IS
-  'Tipo de movimiento: ingreso, baja, reingreso, actualizacion, cambio_estado';
+COMMENT ON COLUMN public.movimientos_personal.tipo_movimiento IS
+  'Solo eventos importantes: ingreso (primera vez), salida (baja), reingreso (regreso después de salida), suspension (temporal), reactivacion (fin de suspensión)';
+
+COMMENT ON COLUMN public.movimientos_personal.snapshot_data IS
+  'Snapshot JSON con el estado completo del personal en el momento del movimiento para trazabilidad';
+
+COMMENT ON COLUMN public.movimientos_personal.fecha_efectiva IS
+  'Fecha en que el movimiento es efectivo (puede diferir de fecha_movimiento si se registra anticipadamente)';
 
 -- Índices
-CREATE INDEX idx_historial_personal_fecha ON public.historial_personal(personal_id, fecha_movimiento DESC);
-CREATE INDEX idx_historial_tipo_personal ON public.historial_personal(tipo_personal);
-CREATE INDEX idx_historial_tipo_movimiento ON public.historial_personal(tipo_movimiento);
-CREATE INDEX idx_historial_fecha_movimiento ON public.historial_personal(fecha_movimiento DESC);
+CREATE INDEX idx_movimientos_personal ON public.movimientos_personal(personal_id, fecha_movimiento DESC);
+CREATE INDEX idx_movimientos_tipo ON public.movimientos_personal(tipo_movimiento);
+CREATE INDEX idx_movimientos_fecha ON public.movimientos_personal(fecha_movimiento DESC);
+CREATE INDEX idx_movimientos_creado_por ON public.movimientos_personal(creado_por);
+
+-- Índice GIN para búsquedas en snapshot_data
+CREATE INDEX idx_movimientos_snapshot ON public.movimientos_personal USING gin(snapshot_data);
 
 -- ============================================
--- TABLA: historial_acciones (Auditoría)
+-- TABLA: historial_acciones (Auditoría general)
 -- ============================================
 
 CREATE TABLE IF NOT EXISTS public.historial_acciones (
@@ -105,7 +109,7 @@ CREATE INDEX idx_historial_registro ON public.historial_acciones(tabla, registro
 CREATE INDEX idx_historial_cambios ON public.historial_acciones USING gin(cambios);
 
 -- ============================================
--- FUNCIÓN: registrar auditoría
+-- FUNCIÓN: registrar auditoría general
 -- ============================================
 
 CREATE OR REPLACE FUNCTION public.registrar_auditoria()
@@ -164,84 +168,82 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+COMMENT ON FUNCTION public.registrar_auditoria() IS
+  'Función genérica para registrar todas las acciones de INSERT/UPDATE/DELETE en historial_acciones';
+
 -- ============================================
--- FUNCIÓN: registrar movimiento de personal
+-- FUNCIÓN: registrar movimiento de personal automático
 -- ============================================
 
-CREATE OR REPLACE FUNCTION public.registrar_movimiento_personal()
+CREATE OR REPLACE FUNCTION public.registrar_movimiento_personal_auto()
 RETURNS TRIGGER AS $$
 DECLARE
   tipo_mov TEXT;
-  usuario_actual UUID;
-  perfil_data RECORD;
+  motivo_mov TEXT;
 BEGIN
-  usuario_actual := COALESCE(
-    current_setting('app.current_user_id', true)::uuid,
-    auth.uid()
-  );
-
-  -- Obtener datos del perfil relacionado
-  SELECT
-    id,
-    nombre_completo,
-    correo
-  INTO perfil_data
-  FROM public.perfiles
-  WHERE id = NEW.perfil_id;
-
-  -- Determinar tipo de movimiento
+  -- Determinar tipo de movimiento según el cambio
   IF (TG_OP = 'INSERT') THEN
     tipo_mov := 'ingreso';
+    motivo_mov := 'Registro inicial de personal en el sistema';
   ELSIF (TG_OP = 'UPDATE') THEN
-    IF (OLD.activo = true AND NEW.activo = false) THEN
-      tipo_mov := 'baja';
-    ELSIF (OLD.activo = false AND NEW.activo = true) THEN
+    -- Cambio de estado a inactivo (salida/baja)
+    IF (OLD.estado = 'activo' AND NEW.estado = 'inactivo') THEN
+      tipo_mov := 'salida';
+      motivo_mov := COALESCE(NEW.observaciones, 'Salida de la empresa');
+    -- Reactivación desde inactivo (reingreso)
+    ELSIF (OLD.estado = 'inactivo' AND NEW.estado = 'activo') THEN
       tipo_mov := 'reingreso';
+      motivo_mov := 'Reingreso a la empresa';
+    -- Suspensión
+    ELSIF (OLD.estado != 'suspendido' AND NEW.estado = 'suspendido') THEN
+      tipo_mov := 'suspension';
+      motivo_mov := COALESCE(NEW.observaciones, 'Suspensión temporal de labores');
+    -- Reactivación desde suspensión
+    ELSIF (OLD.estado = 'suspendido' AND NEW.estado = 'activo') THEN
+      tipo_mov := 'reactivacion';
+      motivo_mov := 'Reactivación después de suspensión';
     ELSE
-      tipo_mov := 'actualizacion';
+      -- No registrar otros cambios (actualizaciones normales)
+      RETURN NEW;
     END IF;
+  ELSE
+    RETURN NEW;
   END IF;
 
-  -- Insertar en historial
-  INSERT INTO public.historial_personal (
+  -- Insertar movimiento en el historial
+  INSERT INTO public.movimientos_personal (
     personal_id,
-    tipo_personal,
-    nombre,
-    cedula,
     tipo_movimiento,
     fecha_movimiento,
+    fecha_efectiva,
     motivo,
-    estado_activo,
-    es_conductor,
-    licencia_conduccion,
-    categoria_licencia,
-    licencia_vencimiento,
+    observaciones,
+    snapshot_data,
     creado_por
   ) VALUES (
-    NEW.perfil_id,
-    NEW.rol, -- operario, auxiliar, inspector
-    perfil_data.nombre_completo,
-    COALESCE(perfil_data.correo, 'N/A'), -- usamos correo como identificador
+    NEW.id,
     tipo_mov,
     CURRENT_DATE,
-    CASE
-      WHEN NEW.activo = false THEN NEW.motivo_inactivacion
-      ELSE NULL
-    END,
-    NEW.activo,
-    CASE WHEN NEW.rol = 'operario' THEN true ELSE false END, -- solo operarios son conductores
-    NEW.licencia_conduccion,
-    NEW.categoria_licencia,
-    NEW.licencia_vencimiento,
-    usuario_actual
+    COALESCE(NEW.fecha_salida, NEW.fecha_ingreso, CURRENT_DATE),
+    motivo_mov,
+    NEW.observaciones,
+    to_jsonb(NEW), -- Guardar snapshot completo del registro
+    COALESCE(
+      current_setting('app.current_user_id', true)::uuid,
+      auth.uid(),
+      NEW.actualizado_por
+    )
   );
 
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+COMMENT ON FUNCTION public.registrar_movimiento_personal_auto() IS
+  'Registra automáticamente movimientos importantes de personal cuando cambia el estado (ingreso, salida, reingreso, suspensión, reactivación)';
+
 -- ============================================
--- TRIGGERS DE AUDITORÍA
+-- TRIGGERS DE AUDITORÍA EN TABLAS PRINCIPALES
 -- ============================================
 
 -- Auditoría en perfiles
@@ -256,9 +258,27 @@ CREATE TRIGGER trigger_auditoria_vehiculos
   FOR EACH ROW
   EXECUTE FUNCTION public.registrar_auditoria();
 
--- Auditoría en roles operativos
-CREATE TRIGGER trigger_auditoria_roles_operativos
-  AFTER INSERT OR UPDATE OR DELETE ON public.roles_operativos
+-- Auditoría en personal
+CREATE TRIGGER trigger_auditoria_personal
+  AFTER INSERT OR UPDATE OR DELETE ON public.personal
+  FOR EACH ROW
+  EXECUTE FUNCTION public.registrar_auditoria();
+
+-- Auditoría en turnos
+CREATE TRIGGER trigger_auditoria_turnos
+  AFTER INSERT OR UPDATE OR DELETE ON public.turnos
+  FOR EACH ROW
+  EXECUTE FUNCTION public.registrar_auditoria();
+
+-- Auditoría en asignaciones_turno
+CREATE TRIGGER trigger_auditoria_asignaciones_turno
+  AFTER INSERT OR UPDATE OR DELETE ON public.asignaciones_turno
+  FOR EACH ROW
+  EXECUTE FUNCTION public.registrar_auditoria();
+
+-- Auditoría en movimientos_personal
+CREATE TRIGGER trigger_auditoria_movimientos_personal
+  AFTER INSERT OR UPDATE OR DELETE ON public.movimientos_personal
   FOR EACH ROW
   EXECUTE FUNCTION public.registrar_auditoria();
 
@@ -281,13 +301,14 @@ CREATE TRIGGER trigger_auditoria_cierres
   EXECUTE FUNCTION public.registrar_auditoria();
 
 -- ============================================
--- TRIGGERS DE HISTORIAL DE PERSONAL
+-- TRIGGER: registrar movimientos automáticos de personal
 -- ============================================
--- NOTA: Los triggers de historial de personal se crean en roles_operativos
--- cuando se modifica el estado activo de un rol operativo
 
--- Historial de roles operativos
-CREATE TRIGGER trigger_historial_roles_operativos
-  AFTER INSERT OR UPDATE ON public.roles_operativos
+-- Trigger para registrar movimientos automáticamente cuando cambia el estado
+CREATE TRIGGER trigger_personal_registrar_movimiento
+  AFTER INSERT OR UPDATE OF estado ON public.personal
   FOR EACH ROW
-  EXECUTE FUNCTION public.registrar_movimiento_personal();
+  EXECUTE FUNCTION public.registrar_movimiento_personal_auto();
+
+COMMENT ON TRIGGER trigger_personal_registrar_movimiento ON public.personal IS
+  'Registra automáticamente en movimientos_personal cuando se crea personal o cambia su estado';
