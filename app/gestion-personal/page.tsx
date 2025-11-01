@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { useAuth } from "@/components/auth-provider"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -57,6 +59,8 @@ import {
 const CATEGORIAS_LICENCIA = ["A1", "A2", "B1", "B2", "B3", "C1", "C2", "C3"]
 
 export default function GestionPersonalPage() {
+  const router = useRouter()
+  const { esAdministrador, loading: authLoading } = useAuth()
   const [operarios, setOperarios] = useState<Operario[]>([])
   const [auxiliares, setAuxiliares] = useState<Auxiliar[]>([])
   const [inspectores, setInspectores] = useState<Inspector[]>([])
@@ -85,9 +89,23 @@ export default function GestionPersonalPage() {
     licencia_vencimiento: "",
   })
 
+  // Verificar permisos de administrador
   useEffect(() => {
-    cargarDatos()
-  }, [])
+    if (!authLoading && !esAdministrador()) {
+      toast({
+        title: "Acceso denegado",
+        description: "Solo los administradores pueden acceder a esta página",
+        variant: "destructive",
+      })
+      router.push("/dashboard")
+    }
+  }, [authLoading, esAdministrador, router, toast])
+
+  useEffect(() => {
+    if (!authLoading && esAdministrador()) {
+      cargarDatos()
+    }
+  }, [authLoading, esAdministrador])
 
   async function cargarDatos() {
     try {
@@ -338,8 +356,29 @@ export default function GestionPersonalPage() {
 
   const perfilesFiltrados = perfiles.filter(perfil =>
     perfil.nombre_completo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    perfil.correo.toLowerCase().includes(searchTerm.toLowerCase())
+    perfil.correo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (perfil.numero_documento && perfil.numero_documento.includes(searchTerm))
   )
+
+  // Mostrar loading mientras se verifica autenticación
+  if (authLoading || (!esAdministrador() && loading)) {
+    return (
+      <div className="container mx-auto py-6">
+        <Card>
+          <CardContent className="py-12">
+            <div className="text-center text-muted-foreground">
+              Cargando...
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // Si no es administrador, no mostrar nada (será redirigido)
+  if (!esAdministrador()) {
+    return null
+  }
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -353,7 +392,7 @@ export default function GestionPersonalPage() {
       <Card>
         <CardHeader>
           <CardTitle>Buscar Personal</CardTitle>
-          <CardDescription>Filtra por nombre o correo</CardDescription>
+          <CardDescription>Filtra por nombre, correo o número de documento</CardDescription>
         </CardHeader>
         <CardContent>
           <Input
@@ -400,7 +439,9 @@ export default function GestionPersonalPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nombre</TableHead>
+                  <TableHead>N° Documento</TableHead>
                   <TableHead>Correo</TableHead>
+                  <TableHead>Teléfono</TableHead>
                   <TableHead>Rol Sistema</TableHead>
                   <TableHead>Roles Operativos</TableHead>
                   <TableHead>Acciones</TableHead>
@@ -410,7 +451,9 @@ export default function GestionPersonalPage() {
                 {perfilesFiltrados.map((perfil) => (
                   <TableRow key={perfil.id}>
                     <TableCell className="font-medium">{perfil.nombre_completo}</TableCell>
+                    <TableCell>{perfil.numero_documento || 'N/A'}</TableCell>
                     <TableCell>{perfil.correo}</TableCell>
+                    <TableCell>{perfil.telefono || 'N/A'}</TableCell>
                     <TableCell>
                       <Badge variant={perfil.rol === 'administrador' ? 'default' : 'secondary'}>
                         {perfil.rol}

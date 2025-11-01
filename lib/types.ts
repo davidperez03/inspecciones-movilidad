@@ -13,6 +13,7 @@ export type Perfil = {
   id: string
   correo: string
   nombre_completo: string
+  numero_documento: string | null
   telefono: string | null
   rol: 'usuario' | 'inspector' | 'administrador'
   activo: boolean
@@ -51,6 +52,7 @@ export type RolOperativo = {
 export type PersonalOperativo = {
   id: string // ID del perfil
   nombre: string // nombre_completo del perfil
+  numero_documento: string | null
   correo: string
   telefono: string | null
   rol_operativo: 'operario' | 'auxiliar' | 'inspector'
@@ -68,18 +70,18 @@ export type PersonalOperativo = {
 // Compatibilidad con código existente
 export type Operario = PersonalOperativo & {
   rol_operativo: 'operario'
-  cedula: string // Para compatibilidad, usar correo
+  cedula: string // numero_documento o correo como fallback
   es_conductor: boolean
 }
 
 export type Auxiliar = PersonalOperativo & {
   rol_operativo: 'auxiliar'
-  cedula: string // Para compatibilidad, usar correo
+  cedula: string // numero_documento o correo como fallback
 }
 
 export type Inspector = PersonalOperativo & {
   rol_operativo: 'inspector'
-  cedula: string // Para compatibilidad, usar correo
+  cedula: string // numero_documento o correo como fallback
 }
 
 // ============================================

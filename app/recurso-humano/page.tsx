@@ -400,7 +400,7 @@ export default function RecursoHumanoPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nombre</TableHead>
-                    <TableHead>Cédula</TableHead>
+                    <TableHead>N° Documento</TableHead>
                     <TableHead>Ingreso</TableHead>
                     <TableHead>Conductor</TableHead>
                     <TableHead>Licencia</TableHead>
@@ -493,7 +493,7 @@ export default function RecursoHumanoPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nombre</TableHead>
-                    <TableHead>Cédula</TableHead>
+                    <TableHead>N° Documento</TableHead>
                     <TableHead>Ingreso</TableHead>
                     <TableHead>Acciones</TableHead>
                   </TableRow>
@@ -560,7 +560,7 @@ export default function RecursoHumanoPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Nombre</TableHead>
-                      <TableHead>Cédula</TableHead>
+                      <TableHead>N° Documento</TableHead>
                       <TableHead>Fecha Retiro</TableHead>
                       <TableHead>Motivo</TableHead>
                       <TableHead>Acciones</TableHead>
@@ -605,7 +605,7 @@ export default function RecursoHumanoPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Nombre</TableHead>
-                      <TableHead>Cédula</TableHead>
+                      <TableHead>N° Documento</TableHead>
                       <TableHead>Fecha Retiro</TableHead>
                       <TableHead>Motivo</TableHead>
                       <TableHead>Acciones</TableHead>

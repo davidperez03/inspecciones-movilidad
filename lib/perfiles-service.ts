@@ -4,6 +4,7 @@ export type Perfil = {
   id: string
   correo: string
   nombre_completo: string
+  numero_documento: string | null
   telefono: string | null
   rol: 'usuario' | 'inspector' | 'administrador'
   activo: boolean
@@ -27,6 +28,7 @@ export async function getPerfiles(): Promise<Perfil[]> {
       id,
       correo,
       nombre_completo,
+      numero_documento,
       telefono,
       rol,
       activo,

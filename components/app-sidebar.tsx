@@ -47,7 +47,8 @@ const navigationGroups = [
         name: "Dashboard",
         href: "/dashboard",
         icon: Home,
-        description: "Vista general del sistema"
+        description: "Vista general del sistema",
+        requiresAdmin: false
       }
     ]
   },
@@ -58,13 +59,15 @@ const navigationGroups = [
         name: "Nueva Inspección",
         href: "/inspecciones/nueva",
         icon: Plus,
-        description: "Crear nueva inspección"
+        description: "Crear nueva inspección",
+        requiresAdmin: false
       },
       {
         name: "Historial",
         href: "/inspecciones/historial",
         icon: ClipboardList,
-        description: "Ver inspecciones anteriores"
+        description: "Ver inspecciones anteriores",
+        requiresAdmin: false
       }
     ]
   },
@@ -75,13 +78,15 @@ const navigationGroups = [
         name: "Bitácora",
         href: "/bitacora",
         icon: BookOpen,
-        description: "Gestionar bitácoras"
+        description: "Gestionar bitácoras",
+        requiresAdmin: false
       },
       {
         name: "Historial",
         href: "/bitacora/historial",
         icon: History,
-        description: "Ver bitácoras anteriores"
+        description: "Ver bitácoras anteriores",
+        requiresAdmin: false
       }
     ]
   },
@@ -92,19 +97,22 @@ const navigationGroups = [
         name: "Personal",
         href: "/gestion-personal",
         icon: UserCog,
-        description: "Crear y gestionar operarios, auxiliares e inspectores"
+        description: "Crear y gestionar operarios, auxiliares e inspectores",
+        requiresAdmin: true
       },
       {
         name: "Vehículos",
         href: "/vehiculos",
         icon: Truck,
-        description: "Gestionar vehículos y documentos"
+        description: "Gestionar vehículos y documentos",
+        requiresAdmin: false
       },
       {
         name: "Recurso Humano",
         href: "/recurso-humano",
         icon: Users,
-        description: "Gestionar personal y licencias"
+        description: "Gestionar personal y licencias",
+        requiresAdmin: false
       }
     ]
   },
@@ -115,7 +123,8 @@ const navigationGroups = [
         name: "Reportes de Personal",
         href: "/reportes-personal",
         icon: BarChart3,
-        description: "Historial y estadísticas de personal"
+        description: "Historial y estadísticas de personal",
+        requiresAdmin: false
       }
     ]
   }
@@ -123,7 +132,7 @@ const navigationGroups = [
 
 export function AppSidebar() {
   const pathname = usePathname()
-  const { signOut, user } = useAuth()
+  const { signOut, user, esAdministrador } = useAuth()
 
   return (
     <Sidebar>
@@ -138,29 +147,39 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent className="px-2">
-        {navigationGroups.map((group) => (
-          <SidebarGroup key={group.title}>
-            <SidebarGroupLabel className="px-3 py-2 text-xs uppercase tracking-wider font-semibold">{group.title}</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {group.items.map((item) => {
-                  const isActive = pathname === item.href
+        {navigationGroups.map((group) => {
+          // Filtrar items según permisos
+          const visibleItems = group.items.filter(item =>
+            !item.requiresAdmin || esAdministrador()
+          )
 
-                  return (
-                    <SidebarMenuItem key={item.name}>
-                      <SidebarMenuButton asChild isActive={isActive} tooltip={item.description} className="h-11 px-3">
-                        <Link href={item.href}>
-                          <item.icon className="h-5 w-5 flex-shrink-0" />
-                          <span className="text-sm font-medium">{item.name}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  )
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        ))}
+          // No mostrar el grupo si no tiene items visibles
+          if (visibleItems.length === 0) return null
+
+          return (
+            <SidebarGroup key={group.title}>
+              <SidebarGroupLabel className="px-3 py-2 text-xs uppercase tracking-wider font-semibold">{group.title}</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {visibleItems.map((item) => {
+                    const isActive = pathname === item.href
+
+                    return (
+                      <SidebarMenuItem key={item.name}>
+                        <SidebarMenuButton asChild isActive={isActive} tooltip={item.description} className="h-11 px-3">
+                          <Link href={item.href}>
+                            <item.icon className="h-5 w-5 flex-shrink-0" />
+                            <span className="text-sm font-medium">{item.name}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    )
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )
+        })}
       </SidebarContent>
 
       <SidebarFooter className="border-t">

@@ -294,21 +294,11 @@ CREATE POLICY "Solo administradores pueden eliminar fotos"
 -- POLÍTICAS: historial_personal
 -- ============================================
 
--- Todos pueden ver el historial de personal
-CREATE POLICY "Todos pueden ver historial de personal"
+-- Solo administradores pueden ver el historial de personal
+CREATE POLICY "Solo administradores pueden ver historial de personal"
   ON public.historial_personal FOR SELECT
   TO authenticated
-  USING (true);
-
--- Los usuarios pueden ver su propio historial
-CREATE POLICY "Usuarios pueden ver su propio historial"
-  ON public.historial_personal FOR SELECT
-  TO authenticated
-  USING (
-    personal_id IN (
-      SELECT perfil_id FROM public.roles_operativos WHERE perfil_id = auth.uid()
-    )
-  );
+  USING (public.es_administrador());
 
 -- Los triggers del sistema pueden insertar en historial
 -- Las funciones con SECURITY DEFINER bypasean RLS automáticamente

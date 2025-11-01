@@ -21,6 +21,7 @@ export async function getPersonalPorRol(rol: 'operario' | 'auxiliar' | 'inspecto
       perfiles:perfil_id (
         id,
         nombre_completo,
+        numero_documento,
         correo,
         telefono
       )
@@ -39,6 +40,7 @@ export async function getPersonalPorRol(rol: 'operario' | 'auxiliar' | 'inspecto
   return (data || []).map((item: any) => ({
     id: item.perfiles.id,
     nombre: item.perfiles.nombre_completo,
+    numero_documento: item.perfiles.numero_documento,
     correo: item.perfiles.correo,
     telefono: item.perfiles.telefono,
     rol_operativo: item.rol,
@@ -61,7 +63,7 @@ export async function getOperarios(): Promise<Operario[]> {
   return personal.map(p => ({
     ...p,
     rol_operativo: 'operario' as const,
-    cedula: p.correo, // Usar correo como identificador
+    cedula: p.numero_documento || p.correo, // Usar numero_documento, o correo como fallback
     es_conductor: !!p.licencia_conduccion,
   }))
 }
@@ -72,7 +74,7 @@ export async function getOperariosActivos(): Promise<Operario[]> {
   return personal.map(p => ({
     ...p,
     rol_operativo: 'operario' as const,
-    cedula: p.correo,
+    cedula: p.numero_documento || p.correo,
     es_conductor: !!p.licencia_conduccion,
   }))
 }
@@ -95,6 +97,7 @@ export async function getConductoresActivos(): Promise<Operario[]> {
       perfiles:perfil_id (
         id,
         nombre_completo,
+        numero_documento,
         correo,
         telefono
       )
@@ -109,6 +112,7 @@ export async function getConductoresActivos(): Promise<Operario[]> {
   return (data || []).map((item: any) => ({
     id: item.perfiles.id,
     nombre: item.perfiles.nombre_completo,
+    numero_documento: item.perfiles.numero_documento,
     correo: item.perfiles.correo,
     telefono: item.perfiles.telefono,
     rol_operativo: 'operario' as const,
@@ -120,7 +124,7 @@ export async function getConductoresActivos(): Promise<Operario[]> {
     categoria_licencia: item.categoria_licencia,
     licencia_vencimiento: item.licencia_vencimiento,
     creado_en: item.creado_en,
-    cedula: item.perfiles.correo,
+    cedula: item.perfiles.numero_documento || item.perfiles.correo,
     es_conductor: true,
   }))
 }
@@ -143,6 +147,7 @@ export async function getOperarioById(id: string): Promise<Operario | null> {
       perfiles:perfil_id (
         id,
         nombre_completo,
+        numero_documento,
         correo,
         telefono
       )
@@ -159,6 +164,7 @@ export async function getOperarioById(id: string): Promise<Operario | null> {
   return {
     id: data.perfiles.id,
     nombre: data.perfiles.nombre_completo,
+    numero_documento: data.perfiles.numero_documento,
     correo: data.perfiles.correo,
     telefono: data.perfiles.telefono,
     rol_operativo: 'operario',
@@ -170,7 +176,7 @@ export async function getOperarioById(id: string): Promise<Operario | null> {
     categoria_licencia: data.categoria_licencia,
     licencia_vencimiento: data.licencia_vencimiento,
     creado_en: data.creado_en,
-    cedula: data.perfiles.correo,
+    cedula: data.perfiles.numero_documento || data.perfiles.correo,
     es_conductor: !!data.licencia_conduccion,
   }
 }
