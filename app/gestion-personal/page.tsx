@@ -34,15 +34,12 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Plus, Pencil, UserMinus, RotateCcw, Users, UserCog, Shield, UserPlus } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
+import { supabase } from "@/lib/supabase"
 import type { Operario, Auxiliar, Inspector } from "@/lib/types"
 import {
   getOperarios,
   getAuxiliares,
   getInspectoresActivos,
-  createOperario,
-  createAuxiliar,
-  updateOperario,
-  updateAuxiliar,
   darDeBajaOperario,
   darDeBajaAuxiliar,
   reactivarOperario,
@@ -56,8 +53,6 @@ import {
   toggleRolOperativo
 } from "@/lib/perfiles-service"
 
-const CATEGORIAS_LICENCIA = ["A1", "A2", "B1", "B2", "B3", "C1", "C2", "C3"]
-
 export default function GestionPersonalPage() {
   const router = useRouter()
   const { esAdministrador, loading: authLoading } = useAuth()
@@ -66,12 +61,9 @@ export default function GestionPersonalPage() {
   const [inspectores, setInspectores] = useState<Inspector[]>([])
   const [perfiles, setPerfiles] = useState<Perfil[]>([])
   const [loading, setLoading] = useState(true)
-  const [dialogOpen, setDialogOpen] = useState(false)
+  const [dialogCrearUsuarioOpen, setDialogCrearUsuarioOpen] = useState(false)
   const [dialogBajaOpen, setDialogBajaOpen] = useState(false)
   const [dialogAsignarRolOpen, setDialogAsignarRolOpen] = useState(false)
-  const [tipoPersonal, setTipoPersonal] = useState<"operario" | "auxiliar" | "inspector">("operario")
-  const [editingOperario, setEditingOperario] = useState<Operario | null>(null)
-  const [editingAuxiliar, setEditingAuxiliar] = useState<Auxiliar | null>(null)
   const [personalBaja, setPersonalBaja] = useState<{ id: string; tipo: "operario" | "auxiliar"; nombre: string } | null>(null)
   const [motivoBaja, setMotivoBaja] = useState("")
   const [searchTerm, setSearchTerm] = useState("")
@@ -79,14 +71,12 @@ export default function GestionPersonalPage() {
   const [nuevoRol, setNuevoRol] = useState<'operario' | 'auxiliar' | 'inspector'>('operario')
   const { toast } = useToast()
 
-  const [formData, setFormData] = useState({
-    nombre: "",
+  const [formNuevoUsuario, setFormNuevoUsuario] = useState({
+    nombre_completo: "",
     correo: "",
+    numero_documento: "",
     telefono: "",
-    es_conductor: false,
-    licencia_conduccion: "",
-    categoria_licencia: "",
-    licencia_vencimiento: "",
+    password: "",
   })
 
   // Verificar permisos de administrador
@@ -132,39 +122,15 @@ export default function GestionPersonalPage() {
     }
   }
 
-  function abrirDialogNuevo(tipo: "operario" | "auxiliar" | "inspector") {
-    setTipoPersonal(tipo)
-    setEditingOperario(null)
-    setEditingAuxiliar(null)
-    setFormData({
-      nombre: "",
+  function abrirDialogNuevoUsuario() {
+    setFormNuevoUsuario({
+      nombre_completo: "",
       correo: "",
+      numero_documento: "",
       telefono: "",
-      es_conductor: false,
-      licencia_conduccion: "",
-      categoria_licencia: "",
-      licencia_vencimiento: "",
+      password: "",
     })
-    setDialogOpen(true)
-  }
-
-  function abrirDialogEditar(item: Operario | Auxiliar | Inspector, tipo: "operario" | "auxiliar" | "inspector") {
-    setTipoPersonal(tipo)
-    if (tipo === "operario") {
-      setEditingOperario(item as Operario)
-    } else if (tipo === "auxiliar") {
-      setEditingAuxiliar(item as Auxiliar)
-    }
-    setFormData({
-      nombre: item.nombre,
-      correo: item.correo,
-      telefono: item.telefono || "",
-      es_conductor: (item as Operario).es_conductor || false,
-      licencia_conduccion: (item as Operario).licencia_conduccion || "",
-      categoria_licencia: (item as Operario).categoria_licencia || "",
-      licencia_vencimiento: (item as Operario).licencia_vencimiento || "",
-    })
-    setDialogOpen(true)
+    setDialogCrearUsuarioOpen(true)
   }
 
   function abrirDialogBaja(id: string, tipo: "operario" | "auxiliar", nombre: string) {
@@ -173,71 +139,46 @@ export default function GestionPersonalPage() {
     setDialogBajaOpen(true)
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleCrearUsuario(e: React.FormEvent) {
     e.preventDefault()
 
-    if (!formData.nombre || !formData.correo) {
+    if (!formNuevoUsuario.nombre_completo || !formNuevoUsuario.correo || !formNuevoUsuario.password) {
       toast({
         title: "Datos incompletos",
-        description: "Nombre y correo son obligatorios",
+        description: "Nombre, correo y contraseña son obligatorios",
         variant: "destructive",
       })
       return
     }
 
     try {
-      if (tipoPersonal === "operario") {
-        const dataToSave = {
-          nombre: formData.nombre,
-          correo: formData.correo,
-          telefono: formData.telefono || undefined,
-          licencia_conduccion: formData.es_conductor ? formData.licencia_conduccion || undefined : undefined,
-          categoria_licencia: formData.es_conductor ? formData.categoria_licencia || undefined : undefined,
-          licencia_vencimiento: formData.es_conductor ? formData.licencia_vencimiento || undefined : undefined,
-        }
+      // Crear usuario en Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formNuevoUsuario.correo,
+        password: formNuevoUsuario.password,
+        options: {
+          data: {
+            nombre_completo: formNuevoUsuario.nombre_completo,
+            numero_documento: formNuevoUsuario.numero_documento || null,
+            telefono: formNuevoUsuario.telefono || null,
+          },
+        },
+      })
 
-        if (editingOperario) {
-          await updateOperario(editingOperario.id, dataToSave)
-          toast({
-            title: "Operario actualizado",
-            description: "Los datos se actualizaron correctamente",
-          })
-        } else {
-          await createOperario(dataToSave)
-          toast({
-            title: "Operario creado",
-            description: "El operario ha sido creado exitosamente",
-          })
-        }
-      } else if (tipoPersonal === "auxiliar") {
-        const dataToSave = {
-          nombre: formData.nombre,
-          correo: formData.correo,
-          telefono: formData.telefono || undefined,
-        }
+      if (authError) throw authError
 
-        if (editingAuxiliar) {
-          await updateAuxiliar(editingAuxiliar.id, dataToSave)
-          toast({
-            title: "Auxiliar actualizado",
-            description: "Los datos se actualizaron correctamente",
-          })
-        } else {
-          await createAuxiliar(dataToSave)
-          toast({
-            title: "Auxiliar creado",
-            description: "El auxiliar ha sido creado exitosamente",
-          })
-        }
-      }
+      toast({
+        title: "Usuario creado",
+        description: "El usuario ha sido creado exitosamente. Puede asignarle roles operativos desde la lista.",
+      })
 
-      setDialogOpen(false)
+      setDialogCrearUsuarioOpen(false)
       cargarDatos()
     } catch (error: any) {
-      console.error("Error al guardar:", error)
+      console.error("Error al crear usuario:", error)
       toast({
-        title: "Error al guardar",
-        description: error.message || "Ha ocurrido un error al guardar los datos",
+        title: "Error al crear usuario",
+        description: error.message || "Ha ocurrido un error al crear el usuario",
         variant: "destructive",
       })
     }
@@ -429,9 +370,13 @@ export default function GestionPersonalPage() {
             <div>
               <h2 className="text-xl font-semibold">Usuarios del Sistema</h2>
               <p className="text-sm text-muted-foreground">
-                Asigna roles operativos a los usuarios registrados
+                Crea usuarios y asigna roles operativos
               </p>
             </div>
+            <Button onClick={abrirDialogNuevoUsuario}>
+              <Plus className="mr-2 h-4 w-4" />
+              Crear Usuario
+            </Button>
           </div>
 
           <Card>
@@ -502,10 +447,9 @@ export default function GestionPersonalPage() {
         <TabsContent value="operarios" className="space-y-4">
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-semibold">Operarios</h2>
-            <Button onClick={() => abrirDialogNuevo("operario")}>
-              <Plus className="mr-2 h-4 w-4" />
-              Nuevo Operario
-            </Button>
+            <p className="text-sm text-muted-foreground">
+              Personal con rol operativo de operario
+            </p>
           </div>
 
           <Card>
@@ -513,8 +457,10 @@ export default function GestionPersonalPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nombre</TableHead>
+                  <TableHead>N° Documento</TableHead>
                   <TableHead>Correo</TableHead>
                   <TableHead>Teléfono</TableHead>
+                  <TableHead>Fecha Ingreso</TableHead>
                   <TableHead>Conductor</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Acciones</TableHead>
@@ -524,8 +470,12 @@ export default function GestionPersonalPage() {
                 {operariosFiltrados.map((operario) => (
                   <TableRow key={operario.id}>
                     <TableCell className="font-medium">{operario.nombre}</TableCell>
+                    <TableCell>{operario.cedula}</TableCell>
                     <TableCell>{operario.correo}</TableCell>
                     <TableCell>{operario.telefono || "N/A"}</TableCell>
+                    <TableCell>
+                      {operario.fecha_inicio ? new Date(operario.fecha_inicio).toLocaleDateString('es-CO') : "N/A"}
+                    </TableCell>
                     <TableCell>
                       {operario.es_conductor ? (
                         <Badge variant="default">Sí - {operario.categoria_licencia}</Badge>
@@ -542,13 +492,6 @@ export default function GestionPersonalPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => abrirDialogEditar(operario, "operario")}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
                         {operario.activo ? (
                           <Button
                             variant="destructive"
@@ -578,10 +521,9 @@ export default function GestionPersonalPage() {
         <TabsContent value="auxiliares" className="space-y-4">
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-semibold">Auxiliares</h2>
-            <Button onClick={() => abrirDialogNuevo("auxiliar")}>
-              <Plus className="mr-2 h-4 w-4" />
-              Nuevo Auxiliar
-            </Button>
+            <p className="text-sm text-muted-foreground">
+              Personal con rol operativo de auxiliar
+            </p>
           </div>
 
           <Card>
@@ -589,8 +531,10 @@ export default function GestionPersonalPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nombre</TableHead>
+                  <TableHead>N° Documento</TableHead>
                   <TableHead>Correo</TableHead>
                   <TableHead>Teléfono</TableHead>
+                  <TableHead>Fecha Ingreso</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Acciones</TableHead>
                 </TableRow>
@@ -599,8 +543,12 @@ export default function GestionPersonalPage() {
                 {auxiliaresFiltrados.map((auxiliar) => (
                   <TableRow key={auxiliar.id}>
                     <TableCell className="font-medium">{auxiliar.nombre}</TableCell>
+                    <TableCell>{auxiliar.cedula}</TableCell>
                     <TableCell>{auxiliar.correo}</TableCell>
                     <TableCell>{auxiliar.telefono || "N/A"}</TableCell>
+                    <TableCell>
+                      {auxiliar.fecha_inicio ? new Date(auxiliar.fecha_inicio).toLocaleDateString('es-CO') : "N/A"}
+                    </TableCell>
                     <TableCell>
                       {auxiliar.activo ? (
                         <Badge variant="default">Activo</Badge>
@@ -610,13 +558,6 @@ export default function GestionPersonalPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => abrirDialogEditar(auxiliar, "auxiliar")}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
                         {auxiliar.activo ? (
                           <Button
                             variant="destructive"
@@ -647,7 +588,7 @@ export default function GestionPersonalPage() {
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-semibold">Inspectores</h2>
             <p className="text-sm text-muted-foreground">
-              Los inspectores deben ser creados manualmente en Supabase
+              Usuarios del sistema con rol operativo de inspector
             </p>
           </div>
 
@@ -678,116 +619,79 @@ export default function GestionPersonalPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Dialog para crear/editar */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl">
+      {/* Dialog para crear usuario */}
+      <Dialog open={dialogCrearUsuarioOpen} onOpenChange={setDialogCrearUsuarioOpen}>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>
-              {editingOperario || editingAuxiliar ? "Editar" : "Nuevo"}{" "}
-              {tipoPersonal === "operario" ? "Operario" : "Auxiliar"}
-            </DialogTitle>
+            <DialogTitle>Crear Nuevo Usuario</DialogTitle>
             <DialogDescription>
-              Complete los datos del {tipoPersonal}
+              Crea un usuario en el sistema. Luego podrás asignarle roles operativos.
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="nombre">Nombre completo *</Label>
-                <Input
-                  id="nombre"
-                  value={formData.nombre}
-                  onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="correo">Correo electrónico *</Label>
-                <Input
-                  id="correo"
-                  type="email"
-                  value={formData.correo}
-                  onChange={(e) => setFormData({ ...formData, correo: e.target.value })}
-                  required
-                  disabled={!!(editingOperario || editingAuxiliar)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="telefono">Teléfono</Label>
-                <Input
-                  id="telefono"
-                  value={formData.telefono}
-                  onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
-                />
-              </div>
+          <form onSubmit={handleCrearUsuario} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="nombre_completo">Nombre completo *</Label>
+              <Input
+                id="nombre_completo"
+                value={formNuevoUsuario.nombre_completo}
+                onChange={(e) => setFormNuevoUsuario({ ...formNuevoUsuario, nombre_completo: e.target.value })}
+                required
+                placeholder="Ej: Juan Pérez"
+              />
             </div>
 
-            {tipoPersonal === "operario" && (
-              <>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="es_conductor"
-                    checked={formData.es_conductor}
-                    onChange={(e) => setFormData({ ...formData, es_conductor: e.target.checked })}
-                    className="rounded"
-                  />
-                  <Label htmlFor="es_conductor">Es conductor (tiene licencia)</Label>
-                </div>
+            <div className="space-y-2">
+              <Label htmlFor="correo">Correo electrónico *</Label>
+              <Input
+                id="correo"
+                type="email"
+                value={formNuevoUsuario.correo}
+                onChange={(e) => setFormNuevoUsuario({ ...formNuevoUsuario, correo: e.target.value })}
+                required
+                placeholder="usuario@empresa.com"
+              />
+            </div>
 
-                {formData.es_conductor && (
-                  <div className="grid grid-cols-3 gap-4 pl-6 border-l-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="licencia">Número de licencia</Label>
-                      <Input
-                        id="licencia"
-                        value={formData.licencia_conduccion}
-                        onChange={(e) => setFormData({ ...formData, licencia_conduccion: e.target.value })}
-                      />
-                    </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Contraseña *</Label>
+              <Input
+                id="password"
+                type="password"
+                value={formNuevoUsuario.password}
+                onChange={(e) => setFormNuevoUsuario({ ...formNuevoUsuario, password: e.target.value })}
+                required
+                placeholder="Mínimo 6 caracteres"
+                minLength={6}
+              />
+            </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="categoria">Categoría</Label>
-                      <Select
-                        value={formData.categoria_licencia}
-                        onValueChange={(value) => setFormData({ ...formData, categoria_licencia: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {CATEGORIAS_LICENCIA.map((cat) => (
-                            <SelectItem key={cat} value={cat}>
-                              {cat}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+            <div className="space-y-2">
+              <Label htmlFor="numero_documento">Número de documento</Label>
+              <Input
+                id="numero_documento"
+                value={formNuevoUsuario.numero_documento}
+                onChange={(e) => setFormNuevoUsuario({ ...formNuevoUsuario, numero_documento: e.target.value })}
+                placeholder="Opcional"
+              />
+            </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="vencimiento">Vencimiento</Label>
-                      <Input
-                        id="vencimiento"
-                        type="date"
-                        value={formData.licencia_vencimiento}
-                        onChange={(e) => setFormData({ ...formData, licencia_vencimiento: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
+            <div className="space-y-2">
+              <Label htmlFor="telefono">Teléfono</Label>
+              <Input
+                id="telefono"
+                value={formNuevoUsuario.telefono}
+                onChange={(e) => setFormNuevoUsuario({ ...formNuevoUsuario, telefono: e.target.value })}
+                placeholder="Opcional"
+              />
+            </div>
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+              <Button type="button" variant="outline" onClick={() => setDialogCrearUsuarioOpen(false)}>
                 Cancelar
               </Button>
               <Button type="submit">
-                {editingOperario || editingAuxiliar ? "Actualizar" : "Crear"}
+                Crear Usuario
               </Button>
             </DialogFooter>
           </form>

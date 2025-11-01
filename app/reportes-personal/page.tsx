@@ -30,6 +30,7 @@ import {
   UserMinus,
   RotateCcw,
   Download,
+  Users,
 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { format } from "date-fns"
@@ -38,6 +39,8 @@ import type {
   MovimientoPersonal,
   PersonalActivoEnFecha,
   EstadisticasMovimientos,
+  Operario,
+  Auxiliar,
 } from "@/lib/types"
 import {
   getMovimientosPorFechas,
@@ -45,12 +48,22 @@ import {
   getConteoPersonalActivoEnFecha,
   getEstadisticasMovimientos,
 } from "@/lib/historial-personal-service"
+import {
+  getOperarios,
+  getAuxiliares,
+  getOperariosRetirados,
+  getAuxiliaresRetirados,
+} from "@/lib/recurso-humano-service"
 import { parseFechaLocal, getFechaHoyLocal, getFechasPorPeriodo } from "@/lib/bitacora-config"
 
 export default function ReportesPersonalPage() {
   const [movimientos, setMovimientos] = useState<MovimientoPersonal[]>([])
   const [personalActivo, setPersonalActivo] = useState<PersonalActivoEnFecha[]>([])
   const [estadisticas, setEstadisticas] = useState<EstadisticasMovimientos[]>([])
+  const [operarios, setOperarios] = useState<Operario[]>([])
+  const [auxiliares, setAuxiliares] = useState<Auxiliar[]>([])
+  const [operariosRetirados, setOperariosRetirados] = useState<Operario[]>([])
+  const [auxiliaresRetirados, setAuxiliaresRetirados] = useState<Auxiliar[]>([])
   const [loading, setLoading] = useState(false)
   const { toast } = useToast()
 
@@ -64,8 +77,12 @@ export default function ReportesPersonalPage() {
   const [fechaConsulta, setFechaConsulta] = useState(getFechaHoyLocal())
   const [conteoPersonal, setConteoPersonal] = useState({ operarios: 0, auxiliares: 0, total: 0 })
 
+  // Filtro para reporte de personal
+  const [estadoPersonalFiltro, setEstadoPersonalFiltro] = useState<"activos" | "retirados" | "todos">("activos")
+
   useEffect(() => {
     cargarEstadisticas()
+    cargarPersonal()
   }, [])
 
   useEffect(() => {
@@ -85,6 +102,23 @@ export default function ReportesPersonalPage() {
       console.error("Error al cargar estadísticas:", error)
       // Si la vista aún no existe, simplemente no mostrar estadísticas
       setEstadisticas([])
+    }
+  }
+
+  async function cargarPersonal() {
+    try {
+      const [ops, auxs, opsRetirados, auxsRetirados] = await Promise.all([
+        getOperarios(),
+        getAuxiliares(),
+        getOperariosRetirados(),
+        getAuxiliaresRetirados(),
+      ])
+      setOperarios(ops.filter(o => o.activo))
+      setAuxiliares(auxs.filter(a => a.activo))
+      setOperariosRetirados(opsRetirados)
+      setAuxiliaresRetirados(auxsRetirados)
+    } catch (error) {
+      console.error("Error al cargar personal:", error)
     }
   }
 
@@ -285,6 +319,57 @@ export default function ReportesPersonalPage() {
     })
   }
 
+  function exportarPersonalFechasCSV() {
+    const personalExportar = estadoPersonalFiltro === "activos"
+      ? [...operarios, ...auxiliares]
+      : estadoPersonalFiltro === "retirados"
+      ? [...operariosRetirados, ...auxiliaresRetirados]
+      : [...operarios, ...auxiliares, ...operariosRetirados, ...auxiliaresRetirados]
+
+    if (personalExportar.length === 0) {
+      toast({
+        title: "Sin datos",
+        description: "No hay personal para exportar",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const BOM = "\uFEFF"
+    const headers = ["Nombre", "N° Documento", "Correo", "Tipo", "Estado", "Fecha Ingreso", "Fecha Salida", "Conductor", "Licencia", "Categoría"]
+
+    const rows = personalExportar.map(p => [
+      escaparCSV(p.nombre),
+      escaparCSV(p.cedula || 'Sin documento'),
+      escaparCSV(p.correo),
+      p.rol_operativo === "operario" ? "Operario" : "Auxiliar",
+      p.activo ? "Activo" : "Retirado",
+      p.fecha_inicio ? format(parseFechaLocal(p.fecha_inicio), "dd/MM/yyyy", { locale: es }) : "-",
+      p.fecha_fin ? format(parseFechaLocal(p.fecha_fin), "dd/MM/yyyy", { locale: es }) : "-",
+      (p as Operario).es_conductor ? "Sí" : "No",
+      escaparCSV((p as Operario).licencia_conduccion || "-"),
+      escaparCSV((p as Operario).categoria_licencia || "-")
+    ])
+
+    const csv = BOM + [headers, ...rows].map(row => row.join(",")).join("\n")
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+    const link = document.createElement("a")
+    const url = URL.createObjectURL(blob)
+    const now = new Date()
+    const fechaExport = format(now, "yyyy-MM-dd", { locale: es })
+    link.setAttribute("href", url)
+    link.setAttribute("download", `Personal_Fechas_${estadoPersonalFiltro}_${fechaExport}.csv`)
+    link.style.visibility = "hidden"
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    toast({
+      title: "Exportación exitosa",
+      description: `${personalExportar.length} registros exportados`,
+    })
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -296,8 +381,12 @@ export default function ReportesPersonalPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="movimientos">
+      <Tabs defaultValue="personal">
         <TabsList>
+          <TabsTrigger value="personal">
+            <Users className="h-4 w-4 mr-2" />
+            Personal y Fechas
+          </TabsTrigger>
           <TabsTrigger value="movimientos">
             <FileText className="h-4 w-4 mr-2" />
             Movimientos
@@ -311,6 +400,222 @@ export default function ReportesPersonalPage() {
             Estadísticas
           </TabsTrigger>
         </TabsList>
+
+        {/* TAB PERSONAL Y FECHAS */}
+        <TabsContent value="personal" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Reporte de Personal con Fechas de Ingreso y Salida</CardTitle>
+              <CardDescription>Visualiza todo el personal con sus fechas de ingreso y salida del sistema</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-4 items-center">
+                <div className="flex-1">
+                  <Label>Filtrar por estado</Label>
+                  <Select value={estadoPersonalFiltro} onValueChange={(v: any) => setEstadoPersonalFiltro(v)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="activos">Solo Activos</SelectItem>
+                      <SelectItem value="retirados">Solo Retirados</SelectItem>
+                      <SelectItem value="todos">Todos</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={exportarPersonalFechasCSV}
+                  className="bg-green-50 hover:bg-green-100 text-green-700 border-green-200 mt-6"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Exportar a Excel
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium">Personal Activo</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{operarios.length + auxiliares.length}</div>
+                    <p className="text-xs text-muted-foreground">{operarios.length} operarios, {auxiliares.length} auxiliares</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium">Personal Retirado</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{operariosRetirados.length + auxiliaresRetirados.length}</div>
+                    <p className="text-xs text-muted-foreground">{operariosRetirados.length} operarios, {auxiliaresRetirados.length} auxiliares</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium">Total</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{operarios.length + auxiliares.length + operariosRetirados.length + auxiliaresRetirados.length}</div>
+                    <p className="text-xs text-muted-foreground">personas en el sistema</p>
+                  </CardContent>
+                </Card>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                {estadoPersonalFiltro === "activos" && `Personal Activo (${operarios.length + auxiliares.length})`}
+                {estadoPersonalFiltro === "retirados" && `Personal Retirado (${operariosRetirados.length + auxiliaresRetirados.length})`}
+                {estadoPersonalFiltro === "todos" && `Todo el Personal (${operarios.length + auxiliares.length + operariosRetirados.length + auxiliaresRetirados.length})`}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nombre</TableHead>
+                    <TableHead>N° Documento</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead>Fecha Ingreso</TableHead>
+                    <TableHead>Fecha Salida</TableHead>
+                    <TableHead>Conductor</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {estadoPersonalFiltro === "activos" && (
+                    <>
+                      {operarios.map((op) => (
+                        <TableRow key={op.id}>
+                          <TableCell className="font-semibold">{op.nombre}</TableCell>
+                          <TableCell>{op.cedula}</TableCell>
+                          <TableCell><Badge variant="default">Operario</Badge></TableCell>
+                          <TableCell><Badge variant="default">Activo</Badge></TableCell>
+                          <TableCell>{op.fecha_inicio ? format(parseFechaLocal(op.fecha_inicio), "dd/MM/yyyy", { locale: es }) : "-"}</TableCell>
+                          <TableCell className="text-muted-foreground">-</TableCell>
+                          <TableCell>
+                            {op.es_conductor ? (
+                              <Badge className="bg-blue-600">Sí - {op.categoria_licencia}</Badge>
+                            ) : (
+                              <Badge variant="outline">No</Badge>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {auxiliares.map((aux) => (
+                        <TableRow key={aux.id}>
+                          <TableCell className="font-semibold">{aux.nombre}</TableCell>
+                          <TableCell>{aux.cedula}</TableCell>
+                          <TableCell><Badge variant="secondary">Auxiliar</Badge></TableCell>
+                          <TableCell><Badge variant="default">Activo</Badge></TableCell>
+                          <TableCell>{aux.fecha_inicio ? format(parseFechaLocal(aux.fecha_inicio), "dd/MM/yyyy", { locale: es }) : "-"}</TableCell>
+                          <TableCell className="text-muted-foreground">-</TableCell>
+                          <TableCell><Badge variant="outline">No</Badge></TableCell>
+                        </TableRow>
+                      ))}
+                    </>
+                  )}
+                  {estadoPersonalFiltro === "retirados" && (
+                    <>
+                      {operariosRetirados.map((op) => (
+                        <TableRow key={op.id}>
+                          <TableCell className="font-semibold">{op.nombre}</TableCell>
+                          <TableCell>{op.cedula}</TableCell>
+                          <TableCell><Badge variant="default">Operario</Badge></TableCell>
+                          <TableCell><Badge variant="destructive">Retirado</Badge></TableCell>
+                          <TableCell>{op.fecha_inicio ? format(parseFechaLocal(op.fecha_inicio), "dd/MM/yyyy", { locale: es }) : "-"}</TableCell>
+                          <TableCell className="font-semibold">{op.fecha_fin ? format(parseFechaLocal(op.fecha_fin), "dd/MM/yyyy", { locale: es }) : "-"}</TableCell>
+                          <TableCell>
+                            {op.es_conductor ? (
+                              <Badge className="bg-blue-600">Sí - {op.categoria_licencia}</Badge>
+                            ) : (
+                              <Badge variant="outline">No</Badge>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {auxiliaresRetirados.map((aux) => (
+                        <TableRow key={aux.id}>
+                          <TableCell className="font-semibold">{aux.nombre}</TableCell>
+                          <TableCell>{aux.cedula}</TableCell>
+                          <TableCell><Badge variant="secondary">Auxiliar</Badge></TableCell>
+                          <TableCell><Badge variant="destructive">Retirado</Badge></TableCell>
+                          <TableCell>{aux.fecha_inicio ? format(parseFechaLocal(aux.fecha_inicio), "dd/MM/yyyy", { locale: es }) : "-"}</TableCell>
+                          <TableCell className="font-semibold">{aux.fecha_fin ? format(parseFechaLocal(aux.fecha_fin), "dd/MM/yyyy", { locale: es }) : "-"}</TableCell>
+                          <TableCell><Badge variant="outline">No</Badge></TableCell>
+                        </TableRow>
+                      ))}
+                    </>
+                  )}
+                  {estadoPersonalFiltro === "todos" && (
+                    <>
+                      {operarios.map((op) => (
+                        <TableRow key={op.id}>
+                          <TableCell className="font-semibold">{op.nombre}</TableCell>
+                          <TableCell>{op.cedula}</TableCell>
+                          <TableCell><Badge variant="default">Operario</Badge></TableCell>
+                          <TableCell><Badge variant="default">Activo</Badge></TableCell>
+                          <TableCell>{op.fecha_inicio ? format(parseFechaLocal(op.fecha_inicio), "dd/MM/yyyy", { locale: es }) : "-"}</TableCell>
+                          <TableCell className="text-muted-foreground">-</TableCell>
+                          <TableCell>
+                            {op.es_conductor ? (
+                              <Badge className="bg-blue-600">Sí - {op.categoria_licencia}</Badge>
+                            ) : (
+                              <Badge variant="outline">No</Badge>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {auxiliares.map((aux) => (
+                        <TableRow key={aux.id}>
+                          <TableCell className="font-semibold">{aux.nombre}</TableCell>
+                          <TableCell>{aux.cedula}</TableCell>
+                          <TableCell><Badge variant="secondary">Auxiliar</Badge></TableCell>
+                          <TableCell><Badge variant="default">Activo</Badge></TableCell>
+                          <TableCell>{aux.fecha_inicio ? format(parseFechaLocal(aux.fecha_inicio), "dd/MM/yyyy", { locale: es }) : "-"}</TableCell>
+                          <TableCell className="text-muted-foreground">-</TableCell>
+                          <TableCell><Badge variant="outline">No</Badge></TableCell>
+                        </TableRow>
+                      ))}
+                      {operariosRetirados.map((op) => (
+                        <TableRow key={op.id}>
+                          <TableCell className="font-semibold">{op.nombre}</TableCell>
+                          <TableCell>{op.cedula}</TableCell>
+                          <TableCell><Badge variant="default">Operario</Badge></TableCell>
+                          <TableCell><Badge variant="destructive">Retirado</Badge></TableCell>
+                          <TableCell>{op.fecha_inicio ? format(parseFechaLocal(op.fecha_inicio), "dd/MM/yyyy", { locale: es }) : "-"}</TableCell>
+                          <TableCell className="font-semibold">{op.fecha_fin ? format(parseFechaLocal(op.fecha_fin), "dd/MM/yyyy", { locale: es }) : "-"}</TableCell>
+                          <TableCell>
+                            {op.es_conductor ? (
+                              <Badge className="bg-blue-600">Sí - {op.categoria_licencia}</Badge>
+                            ) : (
+                              <Badge variant="outline">No</Badge>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {auxiliaresRetirados.map((aux) => (
+                        <TableRow key={aux.id}>
+                          <TableCell className="font-semibold">{aux.nombre}</TableCell>
+                          <TableCell>{aux.cedula}</TableCell>
+                          <TableCell><Badge variant="secondary">Auxiliar</Badge></TableCell>
+                          <TableCell><Badge variant="destructive">Retirado</Badge></TableCell>
+                          <TableCell>{aux.fecha_inicio ? format(parseFechaLocal(aux.fecha_inicio), "dd/MM/yyyy", { locale: es }) : "-"}</TableCell>
+                          <TableCell className="font-semibold">{aux.fecha_fin ? format(parseFechaLocal(aux.fecha_fin), "dd/MM/yyyy", { locale: es }) : "-"}</TableCell>
+                          <TableCell><Badge variant="outline">No</Badge></TableCell>
+                        </TableRow>
+                      ))}
+                    </>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* TAB MOVIMIENTOS */}
         <TabsContent value="movimientos" className="space-y-4">

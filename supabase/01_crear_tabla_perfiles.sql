@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS public.perfiles (
 
   -- Información personal
   nombre_completo TEXT NOT NULL,
-  numero_documento TEXT NOT NULL UNIQUE,
+  numero_documento TEXT, -- Nullable para permitir creación desde dashboard
   telefono TEXT,
 
   -- Configuración de cuenta
@@ -48,7 +48,7 @@ COMMENT ON COLUMN public.perfiles.id IS
   'UUID del usuario, referencia a auth.users';
 
 COMMENT ON COLUMN public.perfiles.numero_documento IS
-  'Número de documento de identidad del usuario (cédula, pasaporte, etc.)';
+  'Número de documento de identidad del usuario (cédula, pasaporte, etc.). Opcional al crear usuario, puede añadirse después';
 
 COMMENT ON COLUMN public.perfiles.rol IS
   'Rol del usuario: administrador (acceso total), inspector (crear inspecciones y eventos), usuario (solo lectura)';
@@ -69,8 +69,10 @@ COMMENT ON COLUMN public.perfiles.bloqueado_hasta IS
 CREATE INDEX IF NOT EXISTS idx_perfiles_correo
   ON public.perfiles(correo);
 
-CREATE INDEX IF NOT EXISTS idx_perfiles_numero_documento
-  ON public.perfiles(numero_documento);
+-- Índice UNIQUE parcial: permite múltiples NULL pero evita duplicados cuando hay valor
+CREATE UNIQUE INDEX IF NOT EXISTS idx_perfiles_numero_documento
+  ON public.perfiles(numero_documento)
+  WHERE numero_documento IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_perfiles_rol
   ON public.perfiles(rol);

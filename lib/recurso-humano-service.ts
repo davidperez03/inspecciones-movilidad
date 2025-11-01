@@ -63,7 +63,7 @@ export async function getOperarios(): Promise<Operario[]> {
   return personal.map(p => ({
     ...p,
     rol_operativo: 'operario' as const,
-    cedula: p.numero_documento || p.correo, // Usar numero_documento, o correo como fallback
+    cedula: p.numero_documento || 'Sin documento', // Usar numero_documento, o marcador si no existe
     es_conductor: !!p.licencia_conduccion,
   }))
 }
@@ -74,7 +74,7 @@ export async function getOperariosActivos(): Promise<Operario[]> {
   return personal.map(p => ({
     ...p,
     rol_operativo: 'operario' as const,
-    cedula: p.numero_documento || p.correo,
+    cedula: p.numero_documento || 'Sin documento',
     es_conductor: !!p.licencia_conduccion,
   }))
 }
@@ -124,7 +124,7 @@ export async function getConductoresActivos(): Promise<Operario[]> {
     categoria_licencia: item.categoria_licencia,
     licencia_vencimiento: item.licencia_vencimiento,
     creado_en: item.creado_en,
-    cedula: item.perfiles.numero_documento || item.perfiles.correo,
+    cedula: item.perfiles.numero_documento || 'Sin documento',
     es_conductor: true,
   }))
 }
@@ -176,7 +176,7 @@ export async function getOperarioById(id: string): Promise<Operario | null> {
     categoria_licencia: data.categoria_licencia,
     licencia_vencimiento: data.licencia_vencimiento,
     creado_en: data.creado_en,
-    cedula: data.perfiles.numero_documento || data.perfiles.correo,
+    cedula: data.perfiles.numero_documento || 'Sin documento',
     es_conductor: !!data.licencia_conduccion,
   }
 }
@@ -247,7 +247,7 @@ export async function createOperario(operario: {
     categoria_licencia: rolData.categoria_licencia,
     licencia_vencimiento: rolData.licencia_vencimiento,
     creado_en: rolData.creado_en,
-    cedula: perfilData.correo,
+    cedula: perfilData.numero_documento || 'Sin documento',
     es_conductor: !!rolData.licencia_conduccion,
   }
 }
@@ -336,7 +336,7 @@ export async function getAuxiliares(): Promise<Auxiliar[]> {
   return personal.map(p => ({
     ...p,
     rol_operativo: 'auxiliar' as const,
-    cedula: p.correo,
+    cedula: p.numero_documento || 'Sin documento',
   }))
 }
 
@@ -346,7 +346,7 @@ export async function getAuxiliaresActivos(): Promise<Auxiliar[]> {
   return personal.map(p => ({
     ...p,
     rol_operativo: 'auxiliar' as const,
-    cedula: p.correo,
+    cedula: p.numero_documento || 'Sin documento',
   }))
 }
 
@@ -392,7 +392,7 @@ export async function getAuxiliarById(id: string): Promise<Auxiliar | null> {
     categoria_licencia: null,
     licencia_vencimiento: null,
     creado_en: data.creado_en,
-    cedula: data.perfiles.correo,
+    cedula: data.perfiles.numero_documento || 'Sin documento',
   }
 }
 
@@ -451,7 +451,7 @@ export async function createAuxiliar(auxiliar: {
     categoria_licencia: null,
     licencia_vencimiento: null,
     creado_en: rolData.creado_en,
-    cedula: perfilData.correo,
+    cedula: perfilData.numero_documento || 'Sin documento',
   }
 }
 
@@ -517,7 +517,7 @@ export async function getInspectoresActivos(): Promise<Inspector[]> {
   return personal.map(p => ({
     ...p,
     rol_operativo: 'inspector' as const,
-    cedula: p.correo,
+    cedula: p.numero_documento || 'Sin documento',
   }))
 }
 
