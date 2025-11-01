@@ -461,6 +461,7 @@ export default function GestionPersonalPage() {
                   <TableHead>Correo</TableHead>
                   <TableHead>Teléfono</TableHead>
                   <TableHead>Fecha Ingreso</TableHead>
+                  <TableHead>Fecha Salida</TableHead>
                   <TableHead>Conductor</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Acciones</TableHead>
@@ -475,6 +476,15 @@ export default function GestionPersonalPage() {
                     <TableCell>{operario.telefono || "N/A"}</TableCell>
                     <TableCell>
                       {operario.fecha_inicio ? new Date(operario.fecha_inicio).toLocaleDateString('es-CO') : "N/A"}
+                    </TableCell>
+                    <TableCell>
+                      {operario.fecha_fin ? (
+                        <span className="text-destructive font-semibold">
+                          {new Date(operario.fecha_fin).toLocaleDateString('es-CO')}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       {operario.es_conductor ? (
@@ -535,6 +545,7 @@ export default function GestionPersonalPage() {
                   <TableHead>Correo</TableHead>
                   <TableHead>Teléfono</TableHead>
                   <TableHead>Fecha Ingreso</TableHead>
+                  <TableHead>Fecha Salida</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Acciones</TableHead>
                 </TableRow>
@@ -548,6 +559,15 @@ export default function GestionPersonalPage() {
                     <TableCell>{auxiliar.telefono || "N/A"}</TableCell>
                     <TableCell>
                       {auxiliar.fecha_inicio ? new Date(auxiliar.fecha_inicio).toLocaleDateString('es-CO') : "N/A"}
+                    </TableCell>
+                    <TableCell>
+                      {auxiliar.fecha_fin ? (
+                        <span className="text-destructive font-semibold">
+                          {new Date(auxiliar.fecha_fin).toLocaleDateString('es-CO')}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       {auxiliar.activo ? (
